@@ -1,6 +1,8 @@
 keboola.component
 keboola.utils
 keboola.http-client
+keboola.csvwriter
+dataconf
 freezegun
 mock
 pydantic

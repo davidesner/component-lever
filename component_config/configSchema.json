@@ -2,18 +2,135 @@
   "type": "object",
   "title": "extractor configuration",
   "required": [
-    "print_hello"
+    "authentication",
+    "endpoints"
   ],
   "properties": {
-    "print_hello": {
-      "type": "boolean",
-      "title": "Print Hello",
+    "authentication": {
+      "type": "object",
+      "title": "Authorization",
+      "required": [
+        "#token"
+      ],
+      "properties": {
+        "#token": {
+          "type": "string",
+          "format": "password",
+          "title": "Api Token",
+          "propertyOrder": 2
+        }
+      },
       "propertyOrder": 1
     },
-    "debug": {
-      "type": "boolean",
-      "title": "Debug",
-      "propertyOrder": 2
+    "endpoints": {
+      "title": "Endpoints",
+      "description": "Endpoints of SERVICE_NAME from which data will be fetched",
+      "type": "array",
+      "format": "select",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "opportunities",
+          "postings",
+          "requisitions"
+        ],
+        "type": "string"
+      },
+      "default": [
+        "opportunities",
+        "postings",
+        "requisitions"
+      ],
+      "propertyOrder": 10
+    },
+    "sync_options": {
+      "type": "object",
+      "title": "Sync Options",
+      "properties": {
+        "sync_mode": {
+          "type": "string",
+          "required": true,
+          "title": "Sync Mode",
+          "enum": [
+            "full_sync",
+            "incremental_sync"
+          ],
+          "options": {
+            "enum_titles": [
+              "Full Sync",
+              "Incremental Sync"
+            ]
+          },
+          "default": "full_sync",
+          "description": "Full Sync downloads all data from the source every run, Incremental Sync downloads data created or updated in a specified time range",
+          "propertyOrder": 20
+        },
+        "start_date": {
+          "type": "string",
+          "title": "Date From",
+          "default": "last run",
+          "description": "Date from which data is downloaded. Either date in YYYY-MM-DD format or dateparser string i.e. 5 days ago, 1 month ago, yesterday, etc. You can also set this as last run, which will fetch data from the last run of the component.",
+          "propertyOrder": 20,
+          "options": {
+            "dependencies": {
+              "sync_mode": "incremental_sync"
+            }
+          }
+        },
+        "end_date": {
+          "type": "string",
+          "title": "Date to",
+          "default": "now",
+          "description": "Date to which data is downloaded. Either date in YYYY-MM-DD format or dateparser string i.e. 5 days ago, 1 month ago, now, etc.",
+          "propertyOrder": 30,
+          "options": {
+            "dependencies": {
+              "sync_mode": "incremental_sync"
+            }
+          }
+        },
+        "additional_filters": {
+          "type": "object",
+          "title": "Filters",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "required": true,
+              "title": "Tag",
+              "propertyOrder": 20
+            }
+          }
+        }
+      },
+      "propertyOrder": 200
+    },
+    "destination": {
+      "type": "object",
+      "title": "Destination",
+      "required": [
+        "load_type"
+      ],
+      "properties": {
+        "load_type": {
+          "enum": [
+            "full_load",
+            "incremental_load"
+          ],
+          "type": "string",
+          "title": "Load Type",
+          "format": "checkbox",
+          "default": "full_load",
+          "options": {
+            "enum_titles": [
+              "Full Load",
+              "Incremental Load"
+            ]
+          },
+          "description": "If Full load is used, the destination table will be overwritten every run. If incremental load is used, data will be upserted into the destination table. Tables with a primary key will have rows updated, tables without a primary key will have rows appended.",
+          "propertyOrder": 20
+        }
+      },
+      "propertyOrder": 400
     }
   }
 }

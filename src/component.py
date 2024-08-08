@@ -2,14 +2,24 @@
 Template Component main class.
 
 """
-import csv
-from datetime import datetime
 import logging
+from dataclasses import asdict, dataclass
 
 from keboola.component.base import ComponentBase
+from keboola.component.dao import TableDefinition
 from keboola.component.exceptions import UserException
+from keboola.csvwriter import ElasticDictWriter
+from keboola.utils.date import parse_datetime_interval
 
+from client import LeverClient
 from configuration import Configuration
+from json_parser import FlattenJsonParser
+
+
+@dataclass
+class WriterCacheRecord:
+    writer: ElasticDictWriter
+    table_definition: TableDefinition
 
 
 class Component(ComponentBase):
@@ -25,63 +35,145 @@ class Component(ComponentBase):
 
     def __init__(self):
         super().__init__()
+        self.endpoint_mapping = {"opportunities": self.get_opportunities,
+                                 "postings": self.get_postings,
+                                 "requisitions": self.get_requisitions
+                                 }
+        self.parser = FlattenJsonParser()
+        self._writer_cache: dict[str, WriterCacheRecord] = dict()
+        self._configuration: Configuration
+        self._client: LeverClient
 
     def run(self):
-        """
-        Main execution code
-        """
+        self._init_configuration()
+        self._init_client()
 
-        # ####### EXAMPLE TO REMOVE
-        # check for missing configuration parameters
-        params = Configuration(**self.configuration.parameters)
+        for endpoint in self._configuration.endpoints:
+            self.endpoint_mapping[endpoint]()
 
-        # Access parameters in configuration
-        if params.print_hello:
-            logging.info("Hello World")
+        for table, cache_record in self._writer_cache.items():
+            cache_record.writer.writeheader()
+            cache_record.writer.close()
+            self.write_manifest(cache_record.table_definition)
 
-        # get input table definitions
-        input_tables = self.get_input_tables_definitions()
-        for table in input_tables:
-            logging.info(f'Received input table: {table.name} with path: {table.full_path}')
+    def get_opportunities(self):
 
-        if len(input_tables) == 0:
-            raise UserException("No input tables found")
+        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
+                                                       self._configuration.sync_options.end_date)
 
-        # get last state data/in/state.json from previous run
-        previous_state = self.get_state_file()
-        logging.info(previous_state.get('some_parameter'))
+        params = {}
 
-        # Create output table (Table definition - just metadata)
-        table = self.create_out_table_definition('output.csv', incremental=True, primary_key=['timestamp'])
+        if start_date:
+            params['updated_at_start'] = int(start_date.timestamp() * 1000)
+        if end_date:
+            params['updated_at_end'] = int(end_date.timestamp() * 1000)
 
-        # get file path of the table (data/out/tables/Features.csv)
-        out_table_path = table.full_path
-        logging.info(out_table_path)
+        params.update(asdict(self._configuration.sync_options.additional_filters))
 
-        # Add timestamp column and save into out_table_path
-        input_table = input_tables[0]
-        with (open(input_table.full_path, 'r') as inp_file,
-              open(table.full_path, mode='wt', encoding='utf-8', newline='') as out_file):
-            reader = csv.DictReader(inp_file)
+        # Fetch and process data for each selected endpoint
+        incremental_load = self._configuration.destination.load_type.is_incremental()
+        logging.info("Fetching data from opportunities")
 
-            columns = list(reader.fieldnames)
-            # append timestamp
-            columns.append('timestamp')
+        table_def = self.create_out_table_definition('opportunities.csv', primary_key=['id'],
+                                                     incremental=incremental_load)
 
-            # write result with column added
-            writer = csv.DictWriter(out_file, fieldnames=columns)
+        for page_data in self._client.fetch_data_paginated('opportunities', params):
+            for item in page_data:
+                self.get_resumes(item['id'])
+                self.get_applications(item['id'])
+
+                self.write_to_csv(self.parser.parse_row(item), 'opportunities', table_def)
+        logging.info("Opportunities extraction completed successfully.")
+
+    def get_resumes(self, opportunity_id: str):
+        # Fetch and process data for each selected endpoint
+        incremental_load = self._configuration.destination.load_type.is_incremental()
+
+        table_def = self.create_out_table_definition('resumes.csv', primary_key=['id'],
+                                                     incremental=incremental_load)
+
+        for item in self._client.fetch_data(f'opportunities/{opportunity_id}/resumes', {}):
+            self.write_to_csv(self.parser.parse_row(item), 'resumes', table_def)
+
+    def get_applications(self, opportunity_id: str):
+        # Fetch and process data for each selected endpoint
+        incremental_load = self._configuration.destination.load_type.is_incremental()
+
+        table_def = self.create_out_table_definition('applications.csv', primary_key=['id'],
+                                                     incremental=incremental_load)
+
+        for item in self._client.fetch_data(f'opportunities/{opportunity_id}/applications', {}):
+            self.write_to_csv(self.parser.parse_row(item), 'applications', table_def)
+
+    def get_postings(self):
+        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
+                                                       self._configuration.sync_options.end_date)
+
+        params = {}
+
+        if start_date:
+            params['updated_at_start'] = int(start_date.timestamp() * 1000)
+        if end_date:
+            params['updated_at_end'] = int(end_date.timestamp() * 1000)
+
+        params.update(asdict(self._configuration.sync_options.additional_filters))
+
+        # Fetch and process data for each selected endpoint
+        incremental_load = self._configuration.destination.load_type.is_incremental()
+        logging.info("Fetching data from postings")
+
+        table_def = self.create_out_table_definition('postings.csv', primary_key=['id'],
+                                                     incremental=incremental_load)
+
+        for page_data in self._client.fetch_data_paginated('postings', params):
+            for item in page_data:
+                self.write_to_csv(self.parser.parse_row(item), 'postings', table_def)
+        logging.info("Postings extraction completed successfully.")
+
+    def get_requisitions(self):
+        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
+                                                       self._configuration.sync_options.end_date)
+
+        params = {}
+
+        if start_date:
+            params['created_at_start'] = int(start_date.timestamp() * 1000)
+        if end_date:
+            params['created_at_end'] = int(end_date.timestamp() * 1000)
+
+        params.update(asdict(self._configuration.sync_options.additional_filters))
+
+        # Fetch and process data for each selected endpoint
+        incremental_load = self._configuration.destination.load_type.is_incremental()
+        logging.info("Fetching data from requisitions")
+
+        table_def = self.create_out_table_definition('requisitions.csv', primary_key=['id'],
+                                                     incremental=incremental_load)
+
+        for page_data in self._client.fetch_data_paginated('requisitions', params):
+            for item in page_data:
+                self.write_to_csv(self.parser.parse_row(item), 'requisitions', table_def)
+        logging.info("Requisitions extraction completed successfully.")
+
+    def write_to_csv(self, parsed_data: dict,
+                     table_name: str,
+                     table_def: TableDefinition,
+                     ) -> None:
+        if not self._writer_cache.get(table_name):
+            writer = ElasticDictWriter(table_def.full_path, [])
             writer.writeheader()
-            for in_row in reader:
-                in_row['timestamp'] = datetime.now().isoformat()
-                writer.writerow(in_row)
 
-        # Save table manifest (output.csv.manifest) from the Table definition
-        self.write_manifest(table)
+            self._writer_cache[table_name] = WriterCacheRecord(writer, table_def)
 
-        # Write new state - will be available next run
-        self.write_state_file({"some_state_parameter": "value"})
+        writer = self._writer_cache[table_name].writer
+        writer.writerow(parsed_data)
 
-        # ####### EXAMPLE TO REMOVE END
+    def _init_client(self):
+        self._client = LeverClient(self._configuration.authentication.pswd_token)
+
+    def _init_configuration(self):
+        self.validate_configuration_parameters(Configuration.get_dataclass_required_parameters())
+        self._configuration: Configuration = Configuration.load_from_dict(self.configuration.parameters)
 
 
 """
