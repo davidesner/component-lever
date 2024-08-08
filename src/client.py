@@ -9,7 +9,8 @@ class LeverClient(HttpClient):
         super().__init__(auth=(token, ''), base_url='https://api.lever.co/v1/', max_retries=4,
                          status_forcelist=(429, 500, 502, 503, 504))
 
-    def fetch_data_paginated(self, endpoint: str, params: Dict[str, Any]) -> Generator[list[dict[str, Any]], None, None]:
+    def fetch_data_paginated(self, endpoint: str,
+                             params: Dict[str, Any]) -> Generator[list[dict[str, Any]], None, None]:
         """
         Fetch data from the specified Lever API endpoint and yield each page of results.
         """
