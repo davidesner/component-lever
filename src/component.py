@@ -4,6 +4,7 @@ Template Component main class.
 """
 import logging
 from dataclasses import asdict, dataclass
+from datetime import datetime
 
 from keboola.component.base import ComponentBase
 from keboola.component.dao import TableDefinition
@@ -57,10 +58,7 @@ class Component(ComponentBase):
             self.write_manifest(cache_record.table_definition)
 
     def get_opportunities(self):
-
-        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
-                                                       self._configuration.sync_options.end_date)
-
+        start_date, end_date = self._get_date_range()
         params = {}
 
         if start_date:
@@ -106,8 +104,7 @@ class Component(ComponentBase):
             self.write_to_csv(self.parser.parse_row(item), 'applications', table_def)
 
     def get_postings(self):
-        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
-                                                       self._configuration.sync_options.end_date)
+        start_date, end_date = self._get_date_range()
 
         params = {}
 
@@ -131,8 +128,7 @@ class Component(ComponentBase):
         logging.info("Postings extraction completed successfully.")
 
     def get_requisitions(self):
-        start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
-                                                       self._configuration.sync_options.end_date)
+        start_date, end_date = self._get_date_range()
 
         params = {}
 
@@ -154,6 +150,13 @@ class Component(ComponentBase):
             for item in page_data:
                 self.write_to_csv(self.parser.parse_row(item), 'requisitions', table_def)
         logging.info("Requisitions extraction completed successfully.")
+
+    def _get_date_range(self) -> tuple[datetime, datetime]:
+        start_date, end_date = None, None
+        if self._configuration.sync_options.start_date and self._configuration.sync_options.end_date:
+            start_date, end_date = parse_datetime_interval(self._configuration.sync_options.start_date,
+                                                           self._configuration.sync_options.end_date)
+        return start_date, end_date
 
     def write_to_csv(self, parsed_data: dict,
                      table_name: str,
