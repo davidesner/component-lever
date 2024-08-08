@@ -91,6 +91,7 @@ class Component(ComponentBase):
                                                      incremental=incremental_load)
 
         for item in self._client.fetch_data(f'opportunities/{opportunity_id}/resumes', {}):
+            item['opportunity_id'] = opportunity_id
             self.write_to_csv(self.parser.parse_row(item), 'resumes', table_def)
 
     def get_applications(self, opportunity_id: str):
@@ -101,6 +102,7 @@ class Component(ComponentBase):
                                                      incremental=incremental_load)
 
         for item in self._client.fetch_data(f'opportunities/{opportunity_id}/applications', {}):
+            item['opportunity_id'] = opportunity_id
             self.write_to_csv(self.parser.parse_row(item), 'applications', table_def)
 
     def get_postings(self):

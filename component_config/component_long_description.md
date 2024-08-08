@@ -1,1 +1,1 @@
-Lever Extractor long description
+[Lever](https://www.lever.co/) provides a comprehensive recruiting platform that enhances talent acquisition with seamless applicant tracking, CRM tools, and insightful analytics.

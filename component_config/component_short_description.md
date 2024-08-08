@@ -1,1 +1,1 @@
-Lever Extractor short description
+Lever provides a comprehensive recruiting platform that enhances talent acquisition with seamless applicant tracking, CRM tools, and insightful analytics.
