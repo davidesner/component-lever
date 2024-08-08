@@ -1,1 +1,1 @@
-git@github.com:davidesner/component-lever.git/blob/master/README.md
+https://github.com/keboola/component-lever/blob/master/README.md

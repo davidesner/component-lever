@@ -1,1 +1,1 @@
-git@github.com:davidesner/component-lever.git
+https://github.com/keboola/component-lever/blob/master
